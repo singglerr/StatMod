@@ -11,8 +11,10 @@ library(caTools)
 library(lmtest)
 library(dplyr)
 library(readxl)
+```
+```{r}
 mydata <- read.csv(file="abon.txt", sep='\t', encoding = "UTF-8")
-mydata
+str(mydata)
 ```
 
 ### Построение модели линейной регрессии
@@ -179,8 +181,8 @@ lines(test$Средняя.продолжительность.разговоро�
 ## Загрузка данных
 
 ```{r}
-vine <- read.csv("winequality-red.csv", sep = ",", encoding = "UTF-8")
-vine
+wine <- read.csv("winequality-red.csv", sep = ",", encoding = "UTF-8")
+str(wine)
 ```
 
 ## Построение модели линейной регрессии
@@ -188,9 +190,9 @@ vine
 Разделим выборку на обучающую и тестовую
 ```{r}
 set.seed(1821)
-split <- sample.split(vine$quality, 0.75)
-train <- subset(vine, split == TRUE)
-test <- subset(vine, split == FALSE)
+split <- sample.split(wine$quality, 0.75)
+train <- subset(wine, split == TRUE)
+test <- subset(wine, split == FALSE)
 
 train_y <- train$quality
 train_x <- train %>% select(-quality) %>% data.matrix()
