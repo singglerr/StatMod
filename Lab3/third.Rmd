@@ -11,8 +11,10 @@ library(caTools)
 library(lmtest)
 library(dplyr)
 library(readxl)
+```
+```{r}
 mydata <- read.csv(file="abon.txt", sep='\t', encoding = "UTF-8")
-mydata
+str(mydata)
 ```
 
 ### Построение модели линейной регрессии
@@ -180,7 +182,7 @@ lines(test$Средняя.продолжительность.разговоро�
 
 ```{r}
 vine <- read.csv("winequality-red.csv", sep = ",", encoding = "UTF-8")
-vine
+str(vine)
 ```
 
 ## Построение модели линейной регрессии
