@@ -2,16 +2,16 @@
 
 ### Загрузка данных
 
-```{r}
+```{r, echo=FALSE}
 library(ggplot2)
 library(memisc)
-#library(DescTools)
+library(DescTools)
 library(broom)
 library(caTools)
 library(lmtest)
 library(dplyr)
 library(readxl)
-mydata <- read.csv(file="abon.txt", sep='\t')
+mydata <- read.csv(file="abon.txt", sep='\t', encoding = "UTF-8")
 mydata
 ```
 
@@ -94,7 +94,7 @@ abs(tm) < tt
 
 Так как t расчетное меньше по модулю чем t табличное, то нулевая гипотеза о равенстве нулю матожидания принимается с вероятностью 0.95.
 
-#№# Проверка на гетероскедастичность
+### Проверка на гетероскедастичность
 H0 - гетероскедастичность отсутствует
 H1 - гетероскедастичность присутствует
 
@@ -174,3 +174,126 @@ plot(test$Средняя.продолжительность.разговоров
 lines(test$Средняя.продолжительность.разговоров, test_l, col = "red")
 ```
 
+# Часть вторая
+
+## Загрузка данных
+
+```{r}
+vine <- read.csv("winequality-red.csv", sep = ",", encoding = "UTF-8")
+vine
+```
+
+## Построение модели линейной регрессии
+
+Разделим выборку на обучающую и тестовую
+```{r}
+set.seed(1821)
+split <- sample.split(vine$quality, 0.75)
+train <- subset(vine, split == TRUE)
+test <- subset(vine, split == FALSE)
+
+train_y <- train$quality
+train_x <- train %>% select(-quality) %>% data.matrix()
+test_x <- test %>% select(-quality) %>% data.matrix()
+```
+
+Построим модель линейной регрессии
+```{r}
+m_lm <- lm(quality ~., data = train)
+summary(m_lm)
+```
+
+## Построение прогноза
+
+```{r}
+test$predict <- predict(m_lm, test)
+ggplot(test, aes(x = quality, y = predict)) + geom_point() + geom_abline() +
+  scale_x_continuous(limits = c(0, 10), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 10), expand = c(0, 0))
+```
+
+## Анализ мультиколлинеарности
+
+Вычислим значения коэффициентов увеличения дисперсии VIFj
+```{r, echo=FALSE}
+library(glmnet)
+library(tidyverse)
+```
+```{r}
+VIF(m_lm)
+```
+Мультиколлинеарность отсутствует.
+
+## Оценка параметров методами Ридж и Lasso
+
+### Метод Ридж
+
+Определим подходящее значение lambda
+```{r}
+lambdas <- seq(0, 150, by = 0.025)
+set.seed(1877)
+cv_ridge <- cv.glmnet(train_x, train_y, alpha = 0, lambda = lambdas)
+plot(cv_ridge)
+```
+```{r}
+cv_ridge$lambda.min
+```
+
+Построим модель линейной регрессии с помощью метода Ридж
+
+```{r}
+set.seed(1877)
+m_ridge <- glmnet(train_x, train_y, alpha = 0, lambda = cv_ridge$lambda.min)
+coef(m_ridge)
+```
+
+Построим прогноз по полученной модели
+
+```{r}
+test$ridge <- predict(m_ridge, s = cv_ridge$lambda.min, newx = test_x)
+```
+
+### Метод Lasso
+
+Определим подходящее занчение lambda
+```{r}
+set.seed(1886)
+cv_lasso <- cv.glmnet(train_x, train_y, alpha = 1, lambda = lambdas)
+plot(cv_lasso)
+```
+```{r}
+cv_lasso$lambda.min
+```
+
+Построим модель линейной регрессии с помощью метода Lasso
+
+```{r}
+set.seed(1886)
+m_lasso <- glmnet(train_x, train_y, alpha = 1, lambda = cv_lasso$lambda.min)
+coef(m_lasso)
+```
+
+Построим прогноз по полученной модели
+
+```{r}
+test$lasso <- predict(m_lasso, s = cv_lasso$lambda.min, newx = test_x)
+```
+
+## Расчёт метрик
+
+```{r}
+metrics <- matrix(0, nrow = 3, ncol = 3, dimnames = list(c("МНК", "Ридж", "Lasso"), c("MAPE", "RMSE", "MAE")))
+metrics["МНК", "MAPE"] <- MAPE(x = test$predict, ref = test$quality)
+metrics["МНК", "RMSE"] <- RMSE(x = test$predict, ref = test$quality)
+metrics["МНК", "MAE"] <- MAE(x = test$predict, ref = test$quality)
+metrics["Ридж", "MAPE"] <- MAPE(x = test$ridge, ref = test$quality)
+metrics["Ридж", "RMSE"] <- RMSE(x = test$ridge, ref = test$quality)
+metrics["Ридж", "MAE"] <- MAE(x = test$ridge, ref = test$quality)
+metrics["Lasso", "MAPE"] <- MAPE(x = test$lasso, ref = test$quality)
+metrics["Lasso", "RMSE"] <- RMSE(x = test$lasso, ref = test$quality)
+metrics["Lasso", "MAE"] <- MAE(x = test$lasso, ref = test$quality)
+```
+Результаты сравнение метрик для различных моделей представлены в таблице
+```{r}
+metrics
+```
