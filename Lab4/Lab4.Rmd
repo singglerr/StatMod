@@ -1,0 +1,255 @@
+---
+title: "Лабораторная работа 4"
+author: "Usov Danil & Naumov Igor"
+date: "05 06 2019"
+output: html_document
+---
+```{r, echo=FALSE}
+library(ggplot2)
+library(memisc)
+library(DescTools)
+library(lmtest)
+library(caTools)
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kernlab)
+library(caret)
+library(mfx)
+library(pROC)
+library(ResourceSelection)
+library(ROCR)
+library(nortest)
+```
+
+# ROC-анализ
+
+## Загрузка данных
+
+```{r}
+data <- read_excel("data.xlsx")
+str(data)
+```
+Исходные данные: ответы граждан США на анкеты после выборов 2017 года.
+
+Источник: https://www.kaggle.com/daliaresearch/trump-effect
+
+Выбранные поля для анализа:
+ Возраст;
+ Пол (1 – М, 2 – Ж);
+ Образование (1 – нет, 2 – какое-то среднее или среднее школьное образование, 3 - закончил среднюю школу или получил эквивалентный диплом, 4 - закончил университет или эквивалентную степень);
+ Политические предпочтения (1 - экстремально левые, 2 - левые, 3 - центрально-левые, 4 центрально-правые, 5 - правые, 6 - экстремально правые);
+ Позиция по поводу внешней политики США (1 – положительное отношение к изоляционной политике, 2 – отрицательное).
+ Кандидат, за которого проголосовал гражданин (1 – Дональд Трамп, 0 – Хиллари Клинтон);
+ 
+Зависимая бинарная переменная – голос за кандидата. Цель исследования – выяснить, какие из перечисленных выше факторов влияют на выбор кандидата у голосовавших. Если есть связь – установить ее характер и силу.
+
+## Корреляционный анализ
+
+Для проведения корреляционного анализа между независимыми переменными попарно используем коэффициент Спирмена.
+
+```{r}
+cor.test(data$age, data$gender, method = "spearman")
+cor.test(data$age, data$education_level, method = "spearman")
+cor.test(data$age, data$political_view, method = "spearman")
+cor.test(data$age, data$isolation, method = "spearman")
+cor.test(data$age, data$vote_for, method = "spearman")
+```
+```{r}
+cor.test(data$gender, data$education_level, method = "spearman")
+cor.test(data$gender, data$political_view, method = "spearman")
+cor.test(data$gender, data$isolation, method = "spearman")
+cor.test(data$gender, data$vote_for, method = "spearman")
+```
+```{r}
+cor.test(data$education_level, data$political_view, method = "spearman")
+cor.test(data$education_level, data$isolation, method = "spearman")
+cor.test(data$education_level, data$vote_for, method = "spearman")
+```
+```{r}
+cor.test(data$political_view, data$isolation, method = "spearman")
+cor.test(data$political_view, data$vote_for, method = "spearman")
+```
+```{r}
+cor.test(data$isolation, data$vote_for, method = "spearman")
+```
+Нет переменных, значительно коррелирующих с другими (коэффициент корреляции > 0.9 и он значим), следовательно, не требуется исключать переменные из набора данных.
+
+## Построение моделей
+
+Преобразуем зависимую переменную как целочисленную.
+```{r}
+data$vote_for <- as.integer(data$vote_for)
+```
+
+Разделим выборку на тестовую и обучающую.
+```{r}
+set.seed(1)
+split <- sample.split(data$vote_for, SplitRatio = 0.7)
+train <- subset(data, split == TRUE)
+test <- subset(data, split == FALSE)
+```
+
+### Логит-модель
+
+```{r}
+model_logit <- glm(vote_for ~ age + isolation + political_view,
+                   train,
+                   family = binomial(link = "logit"))
+summary(model_logit)
+```
+
+### Пробит-модель
+
+```{r}
+model_probit <- glm(vote_for ~ age + isolation + political_view,
+                   train,
+                   family = binomial(link = "probit"))
+summary(model_probit)
+```
+
+### Гомпит-модель
+
+```{r}
+model_gompit <- glm(vote_for ~ age + isolation + political_view,
+                   train,
+                   family = binomial(link = "cloglog"))
+summary(model_gompit)
+```
+
+При построении моделей оставлены только значимые факторы.
+
+### Сравнение полученных моделей
+
+```{r}
+mtable(model_logit, model_probit, model_gompit)
+matrix <- matrix(0, nrow = 2, ncol = 3, dimnames = list(c("AIC", "BIC"), c("model_logit", "model_probit", "model_gompit")))
+matrix["AIC", "model_logit"] = AIC(model_logit)
+matrix["AIC", "model_probit"] = AIC(model_probit)
+matrix["AIC", "model_gompit"] = AIC(model_gompit)
+matrix["BIC", "model_logit"] = AIC(model_logit, k = log(nobs(model_logit)))
+matrix["BIC", "model_probit"] = AIC(model_probit, k = log(nobs(model_probit)))
+matrix["BIC", "model_gompit"] = AIC(model_gompit, k = log(nobs(model_gompit)))
+print(matrix)
+```
+
+Наименьшие информационные критерии AIC и BIC получены у гомпит-модели.
+
+## Оценка качества построенной модели
+
+### Коэффициент детерминации Макфаддена
+```{r}
+R2_logit <- PseudoR2(model_logit, which = "McFadden")
+R2_probit <- PseudoR2(model_logit, which = "McFadden")
+R2_gompit <- PseudoR2(model_logit, which = "McFadden")
+cat("McFadden R-sq (logit): ", R2_logit, "\n")
+cat("McFadden R-sq (probit): ", R2_probit, "\n")
+cat("McFadden R-sq (gompit): ", R2_gompit, "\n")
+```
+
+Коэффициент детерминации Макфаддена 18.5% говорит о низком качестве модели, т.к. изменение предикторов почти не влияет на изменение зависимой переменной.
+
+### Критическая статистика для теста отношения правдоподобия (LR-test)
+
+H0 - модель незначима
+H1 - модель значима
+
+```{r}
+lrtest(model_logit)
+lrtest(model_probit)
+lrtest(model_gompit)
+```
+
+//TODO
+
+### Критерий правдоподобия
+
+```{r}
+PseudoR2(model_logit, which = "logLik")
+PseudoR2(model_probit, which = "logLik")
+PseudoR2(model_gompit, which = "logLik")
+```
+
+По полученным log-likelihood критериям можно сделать вывод, что пробит-модель лучше остальных соответствует исходным данным, т.к. чем меньше значение критерия, тем выше качество модели.
+
+### Tecт Хосмера-Лемешоу
+
+Логит-модель
+```{r}
+preds_logit <- predict(model_logit, test, type = 'response')
+hoslem.test(test$vote_for, preds_logit, g = 10)
+```
+
+Пробит-модель
+```{r}
+preds_probit <- predict(model_probit, test, type = 'response')
+hoslem.test(test$vote_for, preds_probit, g = 10)
+```
+
+Гомпит-модель
+```{r}
+preds_gompit <- predict(model_gompit, test, type = 'response')
+hoslem.test(test$vote_for, preds_gompit, g = 10)
+```
+
+Т.к. p-value > 0.05, можно сказать, что полученные модели плохо описывают реальные данные.
+
+### Графические тесты
+
+```{r}
+qqnorm(model_logit$residuals)
+```
+```{r}
+qqnorm(model_probit$residuals)
+```
+```{r}
+qqnorm(model_gompit$residuals)
+```
+
+### Параметрические тесты
+
+Тест Колмогорова-Смирнова
+
+H0 - остатки подчиняются нормальному закону распределения
+H1 - не подчиняются
+
+```{r}
+lillie.test(model_logit$residuals)
+```
+```{r}
+lillie.test(model_probit$residuals)
+```
+```{r}
+lillie.test(model_gompit$residuals)
+```
+
+Т.к. p-value < 0.05, то H0 о согласии распределения остатков с нормальным законом распределения отклоняется, H1 - принимается.
+
+## Интерпретация результатов
+
+```{r}
+logitmfx(vote_for ~ age + political_view + isolation, data = test)
+```
+```{r}
+probitmfx(vote_for ~ age + political_view + isolation, data = test)
+```
+
+## Построение ROC-кривой
+
+```{r}
+pred <- prediction(preds_gompit, test$vote_for)
+auc <- AUC(test$vote_for, preds_gompit)
+prf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(prf)
+lines(c(0,1), c(0,1))
+text(0.6, 0.2, paste("AUC =", round(auc, 4)), cex = 1.4)
+title("ROC-кривая")
+```
+Качество модели - хорошее
+
+Коэффициент Джини
+```{r}
+dj <- 2 * auc * (auc - 0.5)
+print(dj)
+```
+
