@@ -93,7 +93,7 @@ test <- subset(data, split == FALSE)
 ### Логит-модель
 
 ```{r}
-model_logit <- glm(vote_for ~ age + isolation + political_view,
+model_logit <- glm(vote_for ~ age + isolation + political_view-1,
                    train,
                    family = binomial(link = "logit"))
 summary(model_logit)
@@ -102,7 +102,7 @@ summary(model_logit)
 ### Пробит-модель
 
 ```{r}
-model_probit <- glm(vote_for ~ age + isolation + political_view,
+model_probit <- glm(vote_for ~ age + isolation + political_view-1,
                    train,
                    family = binomial(link = "probit"))
 summary(model_probit)
@@ -111,7 +111,7 @@ summary(model_probit)
 ### Гомпит-модель
 
 ```{r}
-model_gompit <- glm(vote_for ~ age + isolation + political_view,
+model_gompit <- glm(vote_for ~ age + isolation + political_view-1,
                    train,
                    family = binomial(link = "cloglog"))
 summary(model_gompit)
@@ -140,9 +140,11 @@ print(matrix)
 ### Коэффициент детерминации Макфаддена
 ```{r}
 R2_logit <- PseudoR2(model_logit, which = "McFadden")
-R2_probit <- PseudoR2(model_logit, which = "McFadden")
-R2_gompit <- PseudoR2(model_logit, which = "McFadden")
-cat("McFadden R-sq (logit): ", R2_logit, "\n")
+R2_probit <- PseudoR2(model_probit, which = "McFadden")
+R2_gompit <- PseudoR2(model_gompit, which = "McFadden")
+cat("McFadden R-sq (logit): ", R2_
+    
+    logit, "\n")
 cat("McFadden R-sq (probit): ", R2_probit, "\n")
 cat("McFadden R-sq (gompit): ", R2_gompit, "\n")
 ```
@@ -237,6 +239,16 @@ logitmfx(vote_for ~ age + political_view + isolation, data = test)
 probitmfx(vote_for ~ age + political_view + isolation, data = test)
 ```
 Маржинальный экффект по отношению к изоляции больше всего влияет на зависимую переменную (41.3%)
+```{r}
+u <- model_gompit$coefficients["age"] * mean(train$age) + model_gompit$coefficients["political_view"] * mean(train$political_view)
+        + model_gompit$coefficients["isolation"] * mean(train$isolation)
+g <- exp(-exp(-u))*exp(-u)
+cat("Marginal Effects Gompit-Model\n")
+cat("Mraginal Effect (age):", model_gompit$coefficients["age"] * g * 100, "%\n")
+cat("Mraginal Effect (political_view):", model_gompit$coefficients["political_view"] * g * 100, "%\n")
+cat("Mraginal Effect (isolation):", model_gompit$coefficients["isolation"] * g * 100, "%\n")
+```
+Маржинальный экффект гомпи-модели по отношению к изоляции больше всего влияет на зависимую переменную (-23.9%)
 
 ## Построение ROC-кривой
 
@@ -257,3 +269,4 @@ dj <- 2 * auc * (auc - 0.5)
 print(dj)
 ```
 
+        
